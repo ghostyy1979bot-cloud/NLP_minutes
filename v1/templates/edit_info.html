@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <title>Edit Extracted Information</title>
+    <!-- Include Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css">
+    <!-- Custom Styles -->
+    <style>
+        /* Custom styles can be added here */
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1>Edit Extracted Information</h1>
+        <form method="post" action="{{ url_for('save_data') }}">
+            <h2>Header Information</h2>
+            <div class="form-group">
+                <label>Meeting Number:</label>
+                <input type="text" name="Meeting_Number" class="form-control" value="{{ header_info['Meeting_Number'] }}">
+            </div>
+            <div class="form-group">
+                <label>Committee Name:</label>
+                <input type="text" name="Committee_Name" class="form-control" value="{{ header_info['Committee_Name'] }}">
+            </div>
+            <div class="form-group">
+                <label>Date:</label>
+                <input type="text" name="Date" class="form-control" value="{{ header_info['Date'] }}">
+            </div>
+            <div class="form-group">
+                <label>Time:</label>
+                <input type="text" name="Time" class="form-control" value="{{ header_info['Time'] }}">
+            </div>
+            <div class="form-group">
+                <label>Location:</label>
+                <input type="text" name="Location" class="form-control" value="{{ header_info['Location'] }}">
+            </div>
+
+            <h2>Minutes</h2>
+            {% for minit_number, data in minit_summaries.items() %}
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h3>{{ minit_number }}</h3>
+                </div>
+                <div class="card-body">
+                    <input type="hidden" name="minit_number[]" value="{{ minit_number }}">
+                    <div class="form-group">
+                        <label>Summary:</label>
+                        <textarea name="summary[]" class="form-control" rows="4">{{ data['summary'] }}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Tag:</label>
+                        <select name="tag[]" class="form-control">
+                            {% for tag_option in tags %}
+                            <option value="{{ tag_option }}" {% if data['tag'] == tag_option %}selected{% endif %}>{{ tag_option }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Impact:</label>
+                        <select name="impact[]" class="form-control">
+                            {% for impact_option in impact_options %}
+                            <option value="{{ impact_option }}" {% if data['impact'] == impact_option %}selected{% endif %}>{{ impact_option }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <!-- Button to trigger modal -->
+                    <button type="button" class="btn btn-info" data-toggle="modal" data-target="#contentModal{{ loop.index }}">
+                      View Full Content
+                    </button>
+                </div>
+            </div>
+
+            <!-- Modal -->
+            <div class="modal fade" id="contentModal{{ loop.index }}" tabindex="-1" role="dialog" aria-labelledby="contentModalLabel{{ loop.index }}" aria-hidden="true">
+              <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title" id="contentModalLabel{{ loop.index }}">{{ minit_number }} Full Content</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                      <span aria-hidden="true">&times;</span>
+                    </button>
+                  </div>
+                  <div class="modal-body">
+                    <pre>{{ data['content'] }}</pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+
+            <input type="hidden" name="filename" value="{{ filename }}">
+            <button type="submit" class="btn btn-success">Save</button>
+            <a href="{{ url_for('upload_file') }}" class="btn btn-secondary">Cancel</a>
+        </form>
+    </div>
+
+    <!-- Include jQuery and Bootstrap JS -->
+    <script src="https://code.jquery.com/jquery-3.5.0.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js"></script>
+</body>
+</html>
