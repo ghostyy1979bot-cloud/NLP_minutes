@@ -20,8 +20,14 @@
             </div>
             <div class="form-group">
                 <label>Committee Name:</label>
-                <input type="text" name="Committee_Name" class="form-control" value="{{ header_info['Committee_Name'] }}">
-            </div>
+                <select name="Committee_Name" class="form-control">
+                    {% for committee_option in ["Management", "Council", "Console", "Postgraduate"] %}
+                    <option value="{{ committee_option }}" {% if header_info['Committee_Name'] == committee_option %}selected{% endif %}>
+                        {{ committee_option }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>            
             <div class="form-group">
                 <label>Date:</label>
                 <input type="text" name="Date" class="form-control" value="{{ header_info['Date'] }}">

@@ -6,6 +6,8 @@
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css">
     <!-- Include DataTables CSS -->
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.5/css/jquery.dataTables.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.dataTables.min.css">
+
     <style>
         .table-container {
             margin-top: 30px;
@@ -17,6 +19,9 @@
             margin-top: 30px;
             margin-bottom: 30px;
         }
+        .dt-buttons {
+        margin-left: 15px; 
+    }
     </style>
 </head>
 <body>
@@ -62,6 +67,7 @@
                     <tr>
                         <th>#</th>
                         <th>PDF Name</th>
+                        <th>Committee Name</th>
                         <th>Minute Number</th>
                         <th>Date</th>
                         <th>Summary</th>
@@ -74,6 +80,7 @@
                     <tr>
                         <td>{{ record.index }}</td>
                         <td>{{ record.metadata.pdf_name }}</td>
+                        <td>{{ record.metadata.get('committee_name', 'N/A') }}</td>
                         <td>{{ record.metadata.minit_number }}</td>
                         <td>{{ record.metadata.date }}</td>
                         <td>{{ record.metadata.summary }}</td>
@@ -107,92 +114,102 @@
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.5/js/jquery.dataTables.min.js"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.colVis.min.js"></script>
+
     <script>
       $(document).ready(function() {
-          // Initialize DataTables
-          $('#records-table').DataTable({
-              "paging": true,
-              "searching": true,
-              "ordering": true,
-              "info": true
-          });
+    // Initialize DataTables with page length and column visibility toggle
+    var table = $('#records-table').DataTable({
+        paging: true,
+        searching: true,
+        ordering: true,
+        info: true,
+        dom: 'lBfrtip', // 'l' adds the page length control, 'B' adds buttons, 'f' adds search
+        buttons: [
+            'colvis' // Column visibility button
+        ],
+        lengthMenu: [5, 10, 25, 50, 100], // Options for number of rows to display
+        pageLength: 10 // Default number of rows to display
+    });
 
-          $('#upload-form').on('submit', function(event) {
-              event.preventDefault();
+    $('#upload-form').on('submit', function(event) {
+        event.preventDefault();
 
-              // Show the progress modal
-              $('#progressModal').modal({
-                  backdrop: 'static',
-                  keyboard: false
-              });
+        // Show the progress modal
+        $('#progressModal').modal({
+            backdrop: 'static',
+            keyboard: false
+        });
 
-              // Reset progress bar
-              $('#progress-text').text('Starting...');
-              $('#progress-bar').css('width', '0%').removeClass('bg-success bg-danger').addClass('progress-bar-striped progress-bar-animated');
+        // Reset progress bar
+        $('#progress-text').text('Starting...');
+        $('#progress-bar').css('width', '0%').removeClass('bg-success bg-danger').addClass('progress-bar-striped progress-bar-animated');
 
-              // Submit the form via AJAX
-              var formData = new FormData(this);
-              $.ajax({
-                  url: '{{ url_for("upload_file") }}',
-                  type: 'POST',
-                  data: formData,
-                  contentType: false,
-                  processData: false,
-                  success: function(response) {
-                      // Start polling for progress updates
-                      var task_id = response.task_id;
-                      pollProgress(task_id);
-                  },
-                  error: function(xhr) {
-                      alert('An error occurred during file upload.');
-                      $('#progressModal').modal('hide');
-                  }
-              });
-          });
+        // Submit the form via AJAX
+        var formData = new FormData(this);
+        $.ajax({
+            url: '{{ url_for("upload_file") }}',
+            type: 'POST',
+            data: formData,
+            contentType: false,
+            processData: false,
+            success: function(response) {
+                // Start polling for progress updates
+                var task_id = response.task_id;
+                pollProgress(task_id);
+            },
+            error: function(xhr) {
+                alert('An error occurred during file upload.');
+                $('#progressModal').modal('hide');
+            }
+        });
+    });
 
-          function pollProgress(task_id) {
-              $.ajax({
-                  url: '{{ url_for("progress", task_id="") }}' + task_id,
-                  success: function(data) {
-                      var progressText = data.progress;
-                      $('#progress-text').text(progressText);
+    function pollProgress(task_id) {
+        $.ajax({
+            url: '{{ url_for("progress", task_id="") }}' + task_id,
+            success: function(data) {
+                var progressText = data.progress;
+                $('#progress-text').text(progressText);
 
-                      // Update progress bar based on progressText
-                      var progressPercent = 0;
-                      if (progressText.includes('Loading')) progressPercent = 20;
-                      else if (progressText.includes('Extracting header')) progressPercent = 40;
-                      else if (progressText.includes('Extracting meeting')) progressPercent = 60;
-                      else if (progressText.includes('Summarizing')) progressPercent = 80;
-                      else if (progressText.includes('Done')) progressPercent = 100;
+                // Update progress bar based on progressText
+                var progressPercent = 0;
+                if (progressText.includes('Loading')) progressPercent = 20;
+                else if (progressText.includes('Extracting header')) progressPercent = 40;
+                else if (progressText.includes('Extracting meeting')) progressPercent = 60;
+                else if (progressText.includes('Summarizing')) progressPercent = 80;
+                else if (progressText.includes('Done')) progressPercent = 100;
 
-                      $('#progress-bar').css('width', progressPercent + '%');
+                $('#progress-bar').css('width', progressPercent + '%');
 
-                      if (data.complete) {
-                          if (progressText.startsWith('Error')) {
-                              $('#progress-bar').removeClass('progress-bar-striped progress-bar-animated').addClass('bg-danger');
-                              alert(progressText);
-                              $('#progressModal').modal('hide');
-                          } else {
-                              $('#progress-bar').removeClass('progress-bar-striped progress-bar-animated').addClass('bg-success');
-                              // Redirect to the edit_info page with the task_id after a short delay
-                              setTimeout(function() {
-                                  window.location.href = '/edit_info/' + task_id;
-                              }, 500);
-                          }
-                      } else {
-                          setTimeout(function() {
-                              pollProgress(task_id);
-                          }, 1000);
-                      }
-                  },
-                  error: function() {
-                      setTimeout(function() {
-                          pollProgress(task_id);
-                      }, 1000);
-                  }
-              });
-          }
-      });
+                if (data.complete) {
+                    if (progressText.startsWith('Error')) {
+                        $('#progress-bar').removeClass('progress-bar-striped progress-bar-animated').addClass('bg-danger');
+                        alert(progressText);
+                        $('#progressModal').modal('hide');
+                    } else {
+                        $('#progress-bar').removeClass('progress-bar-striped progress-bar-animated').addClass('bg-success');
+                        // Redirect to the edit_info page with the task_id after a short delay
+                        setTimeout(function() {
+                            window.location.href = '/edit_info/' + task_id;
+                        }, 500);
+                    }
+                } else {
+                    setTimeout(function() {
+                        pollProgress(task_id);
+                    }, 1000);
+                }
+            },
+            error: function() {
+                setTimeout(function() {
+                    pollProgress(task_id);
+                }, 1000);
+            }
+        });
+    }
+});
+
     </script>  
 </body>
 </html>

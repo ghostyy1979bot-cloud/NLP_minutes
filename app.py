@@ -118,7 +118,10 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def extract_meeting_header(content):
-    prompt_template = """
+    # List of predefined committee names
+    predefined_committees = ["Management", "Council", "Postgraduate"]
+
+    prompt_template = f"""
     You are an assistant tasked with extracting key information from meeting headers.
 
     The meeting header may be in any language. Translate all extracted information into English.
@@ -129,10 +132,13 @@ def extract_meeting_header(content):
 
     **Important:** Pay close attention to the title, especially the "Meeting_Number". Include all parts of the meeting number exactly as they appear, including any special characters (e.g., "@3r").
 
+    If the committee name matches one of the following options, ensure that only the exact match is returned:
+    {', '.join(predefined_committees)}
+
     **Date and Time:** Ensure that the "Date" is in the format "YYYY-MM-DD" and the "Time" is in the 24-hour format "HH:MM".
 
     Meeting Header:
-    {element}
+    {{element}}
 
     The JSON keys should include:
     - "Meeting_Number" (include all parts of the meeting number as they appear in the title)
@@ -146,9 +152,17 @@ def extract_meeting_header(content):
     chain = LLMChain(llm=llm, prompt=chat_prompt)
     chain_input = {'element': content}
     result = chain.run(chain_input)
+
     # Handle JSON parsing
     try:
-        return json.loads(result)
+        extracted_data = json.loads(result)
+
+        # Validate Committee Name
+        committee_name = extracted_data.get("Committee_Name", "").strip()
+        if committee_name not in predefined_committees:
+            extracted_data["Committee_Name"] = "Unknown"  # Set a default value if no match
+
+        return extracted_data
     except json.JSONDecodeError:
         raise ValueError("Failed to parse JSON from extracted meeting header.")
 
@@ -357,6 +371,7 @@ def process_pdf_task(filename, task_id):
         )
         try:
             header_info = extract_meeting_header(first_page_content)
+            header_info['Committee_Name'] = header_info.get('Committee_Name', 'N/A')  # Default to 'N/A' if not found
         except Exception as e:
             progress_dict[task_id] = f'Error extracting header information: {e}'
             return
@@ -366,13 +381,14 @@ def process_pdf_task(filename, task_id):
         # Extract meeting minutes
         minit_contents = {}
         current_minit = None
-        minit_pattern = re.compile(r'^MINIT\s*(\d+)', re.IGNORECASE)
+        # minit_pattern = re.compile(r'^MINIT\s*(\d+)', re.IGNORECASE)
+        minit_pattern = re.compile(r'^min(?:\.|it)?\s*\d+\s*:', re.IGNORECASE)
+        end_marker_pattern = re.compile(r"disemak\s*dan\s*disahkan", re.IGNORECASE)  # Pattern for "Disemak dan disahkan", ignoring spaces and case
+
         for doc in docs:
             page_number = doc.metadata.get("page_number", 1)
             if page_number >= first_page_number:
                 text = doc.page_content.strip()
-                # For debugging: print the first 50 characters of the text
-                print(f"Page {page_number} Text Start: {text[:50]}")
                 match = minit_pattern.match(text)
                 if match:
                     current_minit = match.group(0)
@@ -381,6 +397,12 @@ def process_pdf_task(filename, task_id):
                 elif current_minit:
                     minit_contents[current_minit] += "\n" + text
                     print(f"Appended text to minute {current_minit}")
+
+                # Check for the end marker
+                if end_marker_pattern.search(text):
+                    print(f"End marker detected on page {page_number}. Last minute identified: {current_minit}")
+                    break  # Stop processing further as the last minute is identified
+
         # Debug: Print all collected minutes
         print(f"Collected minutes: {list(minit_contents.keys())}")
 
@@ -475,6 +497,7 @@ def save_data():
         # Metadata for the record
         metadata = {
             'pdf_name': pdf_name,
+            'committee_name': header_info['Committee_Name'],
             'minit_number': minit_number,
             'summary': summary,
             'tag': tag,
