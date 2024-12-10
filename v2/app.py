@@ -16,7 +16,6 @@ from sentence_transformers import SentenceTransformer
 import chromadb
 from chromadb.utils import embedding_functions
 import tiktoken
-from flask import send_from_directory
 
 # Suppress all logs below WARNING globally (should come first)
 logging.basicConfig(level=logging.WARNING)
@@ -80,20 +79,16 @@ progress_dict = {}
 
 def fetch_all_records():
     # Query the collection for all records
-    results = collection.get(include=["metadatas", "documents"])  # Removed "ids"
+    results = collection.get(include=["metadatas", "documents"])  # Do not include "ids" here
     data = []
     for idx, metadata in enumerate(results["metadatas"]):
-        record_id = results["ids"][idx]  # Access "ids" directly from the results
         record = {
-            "index": idx + 1,  # Sequential number starting from 1
-            "id": record_id,   # Include the record ID for deletion
+            "index": idx + 1,  # Replace ID with sequential number starting from 1
             "metadata": metadata,
             "similarity": None  # No similarity score when fetching all records
         }
         data.append(record)
     return data
-
-
 
 def search_records(query):
     # Encode the query using SentenceTransformer
@@ -158,8 +153,6 @@ def extract_meeting_header(content):
     - "Time"
     - "Location"
     """
-
-    
     human_message_prompt = HumanMessagePromptTemplate.from_template(prompt_template)
     chat_prompt = ChatPromptTemplate.from_messages([human_message_prompt])
     chain = LLMChain(llm=llm, prompt=chat_prompt)
@@ -267,7 +260,7 @@ def summarize_text(text, model="gpt-3.5-turbo"):
     prompt_template = """
     You are an assistant tasked with summarizing meeting minutes.
 
-    Summarize the meeting minute text in plain English, providing detailed information about each point, including specific prices, quantities, and current statuses of equipment or projects, such as the chiller's price and procurement progress. Include any relevant dates, departments involved, and additional context provided. Put everything in form of paragraph
+    Provide a concise summary for the following meeting minute text in plain English.
 
     Additionally, assign an appropriate tag and impact from the provided lists.
 
@@ -283,15 +276,10 @@ def summarize_text(text, model="gpt-3.5-turbo"):
     - Events
     - Strategic Planning
 
-    Based on the meeting summary, determine the impact (choose one: Positive, Negative, Neutral). 
-    Criteria:
-    - Positive: Includes resolved issues, improvements, or beneficial actions.
-    - Negative: Includes unresolved challenges, inefficiencies, or adverse effects.
-    - Neutral: Includes routine updates or plans with no notable outcome.
-    Consider the following:
-    - Does it address an unresolved issue or problem? (Negative)
-    - Does it improve current processes or outcomes? (Positive)
-    - Is it a routine matter or an update with no clear implications? (Neutral)
+    Impact (choose one):
+    - Positive
+    - Negative
+    - Neutral
 
     Text:
     {minit_content}
@@ -307,8 +295,6 @@ def summarize_text(text, model="gpt-3.5-turbo"):
 
     Summary:
     """
-
-
     human_message_prompt = HumanMessagePromptTemplate.from_template(prompt_template)
     chat_prompt = ChatPromptTemplate.from_messages([human_message_prompt])
     chain = LLMChain(llm=llm, prompt=chat_prompt)
@@ -401,8 +387,8 @@ def process_pdf_task(filename, task_id):
         # Extract meeting minutes
         minit_contents = {}
         current_minit = None
-        
-        minit_pattern = re.compile(r'^min(?:\.|it)?\s*(\d+)\s*:', re.IGNORECASE)
+        # minit_pattern = re.compile(r'^MINIT\s*(\d+)', re.IGNORECASE)
+        minit_pattern = re.compile(r'^min(?:\.|it)?\s*\d+\s*:', re.IGNORECASE)
         end_marker_pattern = re.compile(r"disemak\s*dan\s*disahkan", re.IGNORECASE)  # Pattern for "Disemak dan disahkan", ignoring spaces and case
 
         for doc in docs:
@@ -411,7 +397,7 @@ def process_pdf_task(filename, task_id):
                 text = doc.page_content.strip()
                 match = minit_pattern.match(text)
                 if match:
-                    current_minit = match.group(1)  # Capture only the numeric value
+                    current_minit = match.group(0)
                     minit_contents[current_minit] = text
                     print(f"Started new minute: {current_minit}")
                 elif current_minit:
@@ -422,7 +408,6 @@ def process_pdf_task(filename, task_id):
                 if end_marker_pattern.search(text):
                     print(f"End marker detected on page {page_number}. Last minute identified: {current_minit}")
                     break  # Stop processing further as the last minute is identified
-
 
         # Debug: Print all collected minutes
         print(f"Collected minutes: {list(minit_contents.keys())}")
@@ -490,20 +475,6 @@ def edit_info(task_id):
         impact_options=IMPACT_OPTIONS,
         filename=filename
     )
-
-@app.route('/uploads/<filename>')
-def serve_uploaded_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
-
-@app.route('/delete_record/<record_id>', methods=['POST'])
-def delete_record(record_id):
-    try:
-        # Delete the record from the ChromaDB collection
-        collection.delete(ids=[record_id])
-        return jsonify({'success': True, 'message': 'Record deleted successfully.'})
-    except Exception as e:
-        return jsonify({'success': False, 'message': f'Error deleting record: {e}'})
-
 
 @app.route('/save_data', methods=['POST'])
 def save_data():
