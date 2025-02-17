@@ -454,7 +454,7 @@ def process_pdf_task(filename, task_id):
         current_minit = None
         
         minit_pattern = re.compile(r'^min(?:\.|it)?\s*(\d+)\s*:', re.IGNORECASE)
-        end_marker_pattern = re.compile(r"disemak\s*dan\sahkan", re.IGNORECASE)  # Pattern for "Disemak dan disahkan", ignoring spaces and case
+        end_marker_pattern = re.compile(r"disemak\s*dan\sahkan[:\-]*", re.IGNORECASE)
 
         for doc in docs:
             page_number = doc.metadata.get("page_number", 1)
