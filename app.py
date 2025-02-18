@@ -42,6 +42,7 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # Ensure the upload folder exists
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# os.environ["OCR_AGENT"] = "unstructured.partition.utils.ocr_models.tesseract_ocr.OCRAgentTesseract"
 
 # Initialize OpenAI LLM
 openai_api_key = os.getenv('OPENAI_API_KEY')
@@ -364,6 +365,12 @@ def generate_chatgpt_answer(query, top_records):
 
     return answer.strip()
 
+@app.template_filter('lstrip')
+def lstrip_filter(value):
+    if isinstance(value, str):
+        return value.lstrip()
+    return value
+
 
 @app.route('/', methods=['GET', 'POST'])
 def upload_file():
@@ -442,7 +449,7 @@ def process_pdf_task(filename, task_id):
         )
         try:
             header_info = extract_meeting_header(first_page_content)
-            header_info['Committee_Name'] = header_info.get('Committee_Name', 'N/A')  # Default to 'N/A' if not found
+            header_info['Committee_Name'] = header_info.get('Committee_Name', 'N/A')
         except Exception as e:
             progress_dict[task_id] = f'Error extracting header information: {e}'
             return
@@ -452,9 +459,10 @@ def process_pdf_task(filename, task_id):
         # Extract meeting minutes
         minit_contents = {}
         current_minit = None
-        
+
         minit_pattern = re.compile(r'^min(?:\.|it)?\s*(\d+)\s*:', re.IGNORECASE)
-        end_marker_pattern = re.compile(r"disemak\s*dan\sahkan[:\-]*", re.IGNORECASE)
+        # Updated regex: allow for flexible whitespace around words and punctuation
+        end_marker_pattern = re.compile(r"disemak\s*dan\s*disahkan\s*[:\-]+", re.IGNORECASE)
 
         for doc in docs:
             page_number = doc.metadata.get("page_number", 1)
@@ -469,11 +477,10 @@ def process_pdf_task(filename, task_id):
                     minit_contents[current_minit] += "\n" + text
                     print(f"Appended text to minute {current_minit}")
 
-                # Check for the end marker
-                if end_marker_pattern.search(text):
+                # Check for the end marker in the cumulative text of the current minute
+                if current_minit and end_marker_pattern.search(minit_contents[current_minit]):
                     print(f"End marker detected on page {page_number}. Last minute identified: {current_minit}")
                     break  # Stop processing further as the last minute is identified
-
 
         # Debug: Print all collected minutes
         print(f"Collected minutes: {list(minit_contents.keys())}")
@@ -501,7 +508,6 @@ def process_pdf_task(filename, task_id):
                 }
                 print(f"Error summarizing minute {minit_number}: {e}")
 
-        # Save results in progress_dict without creating an overall summary
         progress_dict[task_id] = {
             'status': 'Done',
             'header_info': header_info,
@@ -510,6 +516,7 @@ def process_pdf_task(filename, task_id):
         }
     except Exception as e:
         progress_dict[task_id] = f'Error: {e}'
+
 
 @app.route('/progress/<task_id>')
 def progress(task_id):
